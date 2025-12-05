@@ -398,13 +398,13 @@ long long grow_rainbow_branching(int n, int A_par[][n_MAX + 1], hash_table *H, l
 /* ********** */
 
 /* grow the set of colors */
-// addible[1..(n-1)][1-n][1-n] maintains whether arc (u, v) of color i can be added without violating any constrains nor completing any rainbow spanning arborescences (> 0) or not (0),
+// addible[i][u][v] maintains whether arc (u, v) of color i can be added without violating any constrains nor completing any rainbow spanning arborescences (> 0) or not (0),
 // where its value reflects the number of newly completed rainbow branchings after adding the arc (not precisely counted)
-// value[1..(n-1)][1-n] maintains the priority of pairs (i, v) to be chosen in the next DFS step (higher values are prioritized)
+// value[i][v] maintains the priority of pairs (i, v) to be chosen in the next DFS step (higher values are prioritized)
 
 long long coeff_value[5];
 
-// Update addible[i][1-n][1-n] (used just after some arc of color i is added)
+// Update addible[i][1..n][1..n] (used just after some arc of color i is added)
 void update_addible_flag_color(int n, int A_par[][n_MAX + 1], int addible[][n_MAX + 1][n_MAX + 1], long long value[][n_MAX + 1], int i)
 {
 	int u, v;
