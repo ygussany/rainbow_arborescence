@@ -12,11 +12,6 @@ n
 (n should be given from the standard output and should be at most 10; o/w it immediately halts)
 */
 
-int thres_memo = 25, thres_print = 8;
-// Parameters defining thresholds for memoizing and printing
-// The search branches of depth at most thres_memo are memoized for avoiding duplicated search for symmetric branches
-// The search branches of depth at most thres_print are printed for checking the progress of DFS
-
 /*
 Vertices are indexed by the integers 1 through n.
 
@@ -33,6 +28,7 @@ The canonical form of such an array A[1..(n-1)] is defined as follows:
 - consider all isomorphic configurations A' (i.e., obtained from A by the permutation of the vertex indices [1..n]),
 - sort each of them in the ascending order (i.e., A'[1] <= A'[2] <= ... <= A'[n-1]), and
 - take the lexicographically smallest one among A'[1..(n-1)] obtained as above.
+The search branches whose canonical forms coincide with another branch that has already been completed can be immediately pruned by symmetry (if it is memoized).
 
 Each possible rainbow arborescence/branching (completed for the current set of colors) is specified by X_root[0..n]:
 X_root[0] is an n-bit integer such that its i-th bit is 1 if and only if color i is already used.
@@ -41,14 +37,18 @@ X_root[v] is a 4-bit integer indicating the root of the arborescence containing 
 Each possible rainbow branching X_root[0..n] is encoded into a 64-bit integer X obtained by concatenating X_root[0..n] in this order, i.e., X = the sum of X_root[v] * 2^(4(n-v)) (v = 0, 1, ..., n).
 */
 
+// parameters
+int thres_memo = 25; // The search branches of depth at most thres_memo are memoized for avoiding duplicated search for symmetric branches
+int thres_print = 8; // The search branches of depth at most thres_print are printed for checking the progress of DFS
+
+#define n_MAX 10 // The upper bound of the number of vertices (which should be at most 12 for the above encoding manner)
+#define nA_MAX 2000000 // The upper bound of the number of memoized search branches
+#define nX_MAX 2000000 // The upper bound of the number of possible rainbow branchings
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 
-struct timeval tt;
-double tt_beg, tt_cur;
-
-#define n_MAX 10
 long long bit[61];
 
 /* standard functions and data structures */
@@ -149,8 +149,6 @@ void UF_merge(UF_forest *F, int u, int v)
 #define HASH 5000011
 const int H_Mod = HASH;
 
-#define nX_MAX 2000000
-
 typedef struct HashListElement {
 	struct HashListElement *next;
 	long long X; // encoded rainbow branching
@@ -202,8 +200,6 @@ typedef struct HashListArrayElement {
 	struct HashListArrayElement *next;
 	long long A[n_MAX];
 } hlist_array_ele;
-
-#define nA_MAX 2000000
 
 typedef struct {
 	int n;
@@ -402,7 +398,7 @@ long long grow_rainbow_branching(int n, int A_par[][n_MAX + 1], hash_table *H, l
 // where its value reflects the number of newly completed rainbow branchings after adding the arc (not precisely counted)
 // value[i][v] maintains the priority of pairs (i, v) to be chosen in the next DFS step (higher values are prioritized)
 
-long long coeff_value[5];
+long long coeff_value[5]; // coefficients for evaluation of the next DFS step
 
 // Update addible[i][1..n][1..n] (used just after some arc of color i is added)
 void update_addible_flag_color(int n, int A_par[][n_MAX + 1], int addible[][n_MAX + 1][n_MAX + 1], long long value[][n_MAX + 1], int i)
@@ -466,14 +462,15 @@ void grow_colors(int n, int A_par[][n_MAX + 1], int depth)
 	}
 	if (depth <= thres_memo) { // memoize the canonical form of each completed branch of depth at most the prescribed threshold
 		make_canonical_form_colors(n, A_par, A);
-		if (find_hash_table_array(&H_A, n, A) != NULL) return; // one of the symmetric situations has already been completed
+		if (find_hash_table_array(&H_A, n, A) != NULL) return; // one of the symmetric search branches has already been completed
 		add_hash_table_array(&H_A, n, A);
-		if (depth <= thres_print) { // print the current branch if the search depth is at most the prescribed threshold
+		if (depth <= thres_print) { // print the current search branch if the search depth is at most the prescribed threshold
+			printf("[%d-th search branch (depth: %d)]\n", H_A.n, depth);
 			for (i = 1; i < n; i++) { // colors
 				for (v = 0; v <= n; v++) printf("%d ", A_par[i][v]);
 				printf("\n");
 			}
-			printf("[%d] %d %d\n", H_A.n, depth, q_tail); // the number of distinct branches (memoized so far), the search depth, and the number of rainbow branchings completed in the current branch
+			printf("# of rainbow branchings: %d\n\n", q_tail);
 		}
 	}
 	if (depth == (n - 1) * (n - 1)) { // counterexample (all the colors are completed but no rainbow spanning arborescence has been found)
@@ -538,7 +535,7 @@ void grow_colors(int n, int A_par[][n_MAX + 1], int depth)
 						A_par[ii][vv] = uu;
 						/* checking symmetry here is heavy
 						make_canonical_form_colors(n, A_par, A);
-						if (find_hash_table_array(&H_A, n, A) != NULL) { // one of the symmetric situations has already been completed
+						if (find_hash_table_array(&H_A, n, A) != NULL) { // one of the symmetric search branches has already been completed
 							value[ii][vv] += coeff_value[0];
 							if (uu <= 3) value[ii][vv] -= coeff_value[3];
 							if (vv <= 3) value[ii][vv] -= coeff_value[3];
@@ -583,7 +580,7 @@ void grow_colors(int n, int A_par[][n_MAX + 1], int depth)
 
 // Find the next root configuration in the lexicographic order:
 // each root configuration is defined by rho[1-n] (rho[j] is the number of colors whose root is j), and
-// rho is non-increasing (by symmetry) and rho[3] >= 2 (at least three multiroots are necessary).
+// rho is non-increasing (by symmetry) and rho[3] >= 2 (at least three multi-roots are necessary).
 int next_root_configuration(int n, int A_par[][n_MAX + 1])
 {
 	int i, j, k;
@@ -632,6 +629,8 @@ int main()
 	for (; i < n - 2; i++) A_par[i][0] = 2;
 	for (; i < n; i++) A_par[i][0] = 3;
 
+	struct timeval tt;
+	double tt_beg, tt_cur;
 	gettimeofday(&tt, NULL);
 	tt_beg = tt.tv_sec + (double)tt.tv_usec / 1000000;
 	do {
